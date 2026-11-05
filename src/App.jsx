@@ -1,41 +1,120 @@
 import { useEffect, useState } from "react";
 import originalHtml from "./cardapio.html?raw";
 
-/**
- * Preserva o HTML/CSS original do cardápio e o monta dentro do ciclo de vida
- * do React. Os links de WhatsApp são configurados após a montagem.
- */
+const contacts = {
+  carlos: { number: "5592988239348", name: "Carlos Eduardo" },
+  eugenio: { number: "5592986336512", name: "Eugênio" },
+};
+
 export default function App() {
   const [markup, setMarkup] = useState("");
+  const [selectedContact, setSelectedContact] = useState("carlos");
 
   useEffect(() => {
-    const documentFromTemplate = new DOMParser().parseFromString(originalHtml, "text/html");
-    const originalStyles = documentFromTemplate.querySelector("style")?.textContent ?? "";
-    const styleElement = document.createElement("style");
-    styleElement.id = "kadu-original-styles";
-    styleElement.textContent = originalStyles;
-    document.head.appendChild(styleElement);
+    const template = new DOMParser().parseFromString(originalHtml, "text/html");
 
-    documentFromTemplate.querySelectorAll("script").forEach((script) => script.remove());
-    setMarkup(documentFromTemplate.body.innerHTML);
+    const style = document.createElement("style");
+    style.id = "catalog-original-styles";
 
-    return () => styleElement.remove();
+    style.textContent = [...template.querySelectorAll("style")]
+      .map((node) => node.textContent)
+      .join("\n");
+
+    document.head.appendChild(style);
+
+    // O comportamento do script original foi reimplementado com React.
+    template.querySelectorAll("script").forEach((node) => node.remove());
+
+    setMarkup(template.body.innerHTML);
+
+    return () => style.remove();
   }, []);
 
   useEffect(() => {
     if (!markup) return;
 
-    const whatsappNumber = "5592988239348";
+    const contact = contacts[selectedContact] ?? contacts.carlos;
+
+    // Atualiza os links individuais dos serviços.
     document.querySelectorAll("#cardapio [data-svc]").forEach((element) => {
-      const service = element.getAttribute("data-svc") || "um atendimento (vi o cardápio)";
-      const message = `Olá, Kadu! Vi o cardápio e quero saber sobre: ${service}`;
-      element.setAttribute("href", `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(message)}`);
+      const service = element.getAttribute("data-svc") || "um serviço";
+
+      const message = `Olá, ${contact.name}! Vi o catálogo de serviços e gostaria de saber sobre: ${service}`;
+
+      element.setAttribute(
+        "href",
+        `https://wa.me/${contact.number}?text=${encodeURIComponent(message)}`
+      );
+
       element.setAttribute("target", "_blank");
       element.setAttribute("rel", "noopener noreferrer");
     });
+
+    // Atualiza a seleção visual do contato.
+    document.querySelectorAll("#cardapio [data-person]").forEach((element) => {
+      const isSelected =
+        element.getAttribute("data-person") === selectedContact;
+
+      element.classList.toggle("sel", isSelected);
+    });
+
+    // Atualiza os botões gerais de contato.
+    document.querySelectorAll("#cardapio a[href*='wa.me']").forEach((element) => {
+      if (element.hasAttribute("data-svc")) return;
+
+      const message = `Olá, ${contact.name}! Vi o catálogo de serviços e gostaria de um orçamento.`;
+
+      element.setAttribute(
+        "href",
+        `https://wa.me/${contact.number}?text=${encodeURIComponent(message)}`
+      );
+    });
+  }, [markup, selectedContact]);
+
+  useEffect(() => {
+    if (!markup) return;
+
+    const handleClick = (event) => {
+      const person = event.target.closest("#cardapio [data-person]");
+
+      if (person) {
+        event.preventDefault();
+
+        const key = person.getAttribute("data-person");
+
+        if (contacts[key]) {
+          setSelectedContact(key);
+        }
+      }
+    };
+
+    const handleScroll = () => {
+      const fab = document.querySelector("#cardapio .fab");
+
+      if (!fab) return;
+
+      const atBottom =
+        window.innerHeight + window.scrollY >=
+        document.documentElement.scrollHeight - 140;
+
+      fab.classList.toggle("show", window.scrollY > 620 && !atBottom);
+    };
+
+    document.addEventListener("click", handleClick);
+    window.addEventListener("scroll", handleScroll, { passive: true });
+
+    handleScroll();
+
+    return () => {
+      document.removeEventListener("click", handleClick);
+      window.removeEventListener("scroll", handleScroll);
+    };
   }, [markup]);
 
   return (
-    <main id="cardapio" dangerouslySetInnerHTML={{ __html: markup }} />
+    <main
+      id="cardapio"
+      dangerouslySetInnerHTML={{ __html: markup }}
+    />
   );
 }
